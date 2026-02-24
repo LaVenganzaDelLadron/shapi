@@ -1,4 +1,4 @@
 Django==6.0.2
 djangorestframework==3.16.1
-psycopg[binary]==3.2.9
+psycopg[binary]==3.2.13
 scikit-learn==1.5.2
