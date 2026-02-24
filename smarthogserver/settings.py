@@ -10,8 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,12 +21,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-%66a51-3x78bu!hk-5i92%vwei6o61#o-k62(gs$3f3y^zsb)c'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-%66a51-3x78bu!hk-5i92%vwei6o61#o-k62(gs$3f3y^zsb)c",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS=shapi-qq0p.onrender.com,localhost,127.0.0.1", "127.0.0.1").split(",")
+allowed_hosts_raw = os.environ.get(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1",
+)
+ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_raw.split(",") if host.strip()]
+
+render_external_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
+if render_external_hostname and render_external_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_external_hostname)
+
+CSRF_TRUSTED_ORIGINS = []
+render_external_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+if render_external_url.startswith("https://"):
+    CSRF_TRUSTED_ORIGINS.append(render_external_url)
 
 
 # Application definition
