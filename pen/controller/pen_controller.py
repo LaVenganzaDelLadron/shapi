@@ -59,6 +59,27 @@ class GetPenController(APIView):
             status=status.HTTP_200_OK,
         )
 
+
+class GetSpecificPenController(APIView):
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+
+    def get(self, request, pen_code):
+        pen = Pen.objects.filter(pen_code=pen_code).first()
+        if not pen:
+            return Response(
+                {'message': f'Pen with pen_code "{pen_code}" not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                'message': f'Pen "{pen_code}" fetched successfully',
+                'data': PenSerializer(pen).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class DeletePenController(APIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
