@@ -8,6 +8,9 @@ class PenSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pen
         fields = ('pen_code', 'pen_name', 'capacity', 'status', 'notes', 'date')
+        extra_kwargs = {
+            'pen_code': {'read_only': True},
+        }
 
     def create(self, validated_data):
         return Pen.objects.create(**validated_data)
