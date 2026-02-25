@@ -1,1 +1,42 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Environment variables
 .env
+.env.*
+
+# Django logs
+*.log
+
+# Static & media (if collected locally)
+staticfiles/
+media/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# Coverage
+htmlcov/
+.coverage
+
+# ML models (if you use tree-based rules)
+ml/*.pkl
+ml/*.joblib
