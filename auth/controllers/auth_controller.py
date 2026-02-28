@@ -5,7 +5,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.db.models import Q
-from django.middleware.csrf import get_token
+from rest_framework.authtoken.models import Token
 from auth.serializers import SignupSerializer, LoginSerializer
 
 
@@ -58,12 +58,5 @@ class LoginController(APIView):
 
 class LogoutController(APIView):
     def post(self, request):
-        if request.user.is_authenticated:
-            return Response(
-                {'message': 'Logout Successfully'},
-                status=status.HTTP_200_OK,
-            )
-        return Response(
-            {'message': 'No active session found'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        Token.objects.filter(user=request.user).delete()
+        return Response({'message': 'Logout Successfully'})
