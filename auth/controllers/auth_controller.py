@@ -56,10 +56,6 @@ class LoginController(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CSRFTokenView(APIView):
-    def get(self, request):
-        return Response({'csrfToken': get_token(request)})
-
 class LogoutController(APIView):
     def post(self, request):
         if request.user.is_authenticated:
