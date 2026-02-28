@@ -5,7 +5,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.db.models import Q
-from rest_framework.authtoken.models import Token
+from django.middleware.csrf import get_token
 from auth.serializers import SignupSerializer, LoginSerializer
 
 
@@ -53,10 +53,12 @@ class LoginController(APIView):
                 {'message': 'Invalid email or password'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class LogoutController(APIView):
     def post(self, request):
-        Token.objects.filter(user=request.user).delete()
-        return Response({'message': 'Logout Successfully'})
+        return Response(
+            {'message': 'Logout Successfully'},
+            status=status.HTTP_200_OK,
+        )
