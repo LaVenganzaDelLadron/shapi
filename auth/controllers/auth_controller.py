@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import authenticate
+from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.db.models import Q
 from auth.serializers import SignupSerializer, LoginSerializer
@@ -53,3 +54,18 @@ class LoginController(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LogoutController(APIView):
+    def post(self, request):
+        if request.user.is_authenticated:
+            logout(request)
+            return Response(
+                {'message': 'Logout Successfully'},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {'message': 'No active session found'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
