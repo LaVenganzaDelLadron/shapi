@@ -17,7 +17,7 @@ class Pen(models.Model):
 
     @classmethod
     def generate_next_pen_code(cls):
-        prefix = 'PEN-'
+        prefix = 'PEN'
         pattern = re.compile(rf'^{prefix}(\d+)$')
         max_number = 0
 
