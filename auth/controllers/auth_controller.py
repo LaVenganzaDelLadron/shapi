@@ -59,12 +59,10 @@ class LoginController(APIView):
 class LogoutController(APIView):
     def post(self, request):
         if request.user.is_authenticated:
-            logout(request)
             return Response(
                 {'message': 'Logout Successfully'},
                 status=status.HTTP_200_OK,
             )
-
         return Response(
             {'message': 'No active session found'},
             status=status.HTTP_400_BAD_REQUEST,
