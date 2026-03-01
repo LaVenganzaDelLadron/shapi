@@ -5,8 +5,8 @@ from rest_framework import status
 from rest_framework.exceptions import UnsupportedMediaType
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from django.db.models import Sum
+from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from batch.models import PigBatches
 from batch.serializers import PigBatchesSerializer
 
@@ -153,8 +153,5 @@ class GetActiveBatchesController(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
-
 
 
