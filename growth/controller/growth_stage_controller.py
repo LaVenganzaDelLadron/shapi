@@ -63,13 +63,13 @@ class DeleteGrowthStageController(APIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def delete(self, request, growth_code):
-        growth_code = GrowthStage.objects.filter(growth_code=growth_code).first()
-        if not growth_code:
+        growth = GrowthStage.objects.filter(growth_code=growth_code).first()
+        if not growth:
             return Response(
                 {'message': f'Growth Stage "{growth_code}" not found'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        growth_code.delete()
+        growth.delete()
         return Response(
             {'message': f'Growth Stage "{growth_code}" deleted successfully'},
             status=status.HTTP_200_OK,
