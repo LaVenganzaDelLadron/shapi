@@ -12,13 +12,15 @@ class GrowthStage(models.Model):
         prefix = 'GROWTH'
         pattern = re.compile(rf'^{prefix}(\d+)$')
         max_number = 0
-        
-        codes = cls.objects.filter(growth_code__startswith=pattern).values_list('growth_code', flat=True)
+
+        codes = cls.objects.filter(growth_code__startswith=prefix) \
+            .values_list('growth_code', flat=True)
+
         for code in codes:
             match = pattern.match(code)
             if match:
                 max_number = max(max_number, int(match.group(1)))
-                
+
         return f'{prefix}{max_number + 1:03d}'
 
     def save(self, *args, **kwargs):
