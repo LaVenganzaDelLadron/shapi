@@ -11,6 +11,5 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Device
-        fields = ('device_code', 'device_type', 'pen_code', 'date')
-
+        fields = ('device_code', 'pen_code', 'date')
 
