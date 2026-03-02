@@ -29,6 +29,8 @@ class PigBatchesSerializer(serializers.ModelSerializer):
             'growth_stage_id',
             'date',
         )
-
+        extra_kwargs = {
+            'batch_code': {'read_only': True},
+        }
 
 
