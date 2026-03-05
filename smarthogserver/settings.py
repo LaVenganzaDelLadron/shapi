@@ -111,12 +111,6 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smarthog_ym96',
-        'USER': 'smarthog_ym96_user',
-        'PASSWORD': 'OlICnbbWxpjZNMxlsF3fI0YBcIvHJXEk',
-        'HOST': 'dpg-d6fihbhaae7s73arm070-a.oregon-postgres.render.com',
-        'PORT': '5432',
     }
 }
 
