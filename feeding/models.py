@@ -4,7 +4,6 @@ class Feeding(models.Model):
     feed_code = models.CharField(max_length=120, unique=True)
     feed_quantity = models.FloatField()
     feed_time = models.DateTimeField()
-    feed_type = models.CharField(max_length=20)
     batch_code = models.ForeignKey('batch.PigBatches', on_delete=models.CASCADE)
     device_code = models.ForeignKey('device.Device', on_delete=models.CASCADE)
     pen_code = models.ForeignKey('pen.Pen', on_delete=models.CASCADE)
