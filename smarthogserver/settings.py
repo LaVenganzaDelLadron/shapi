@@ -111,18 +111,44 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+def _database_config():
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url and not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL is required when DJANGO_DEBUG is False."
+        )
 
+    if database_url:
+        parsed = urlparse(database_url)
+        query_params = parse_qs(parsed.query)
+        sslmode = (
+            os.environ.get("DJANGO_DB_SSLMODE", "").strip()
+            or (query_params.get("sslmode", [None])[0] or "require")
+        )
 
-# Database (default SQLite)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smarthog_0wre',
-        'USER': 'smarthog_0wre_user',
-        'PASSWORD': 'aZSB5C8AUYsfAYx0VYjIVJ9xQLnelSFG',
-        'HOST': 'dpg-d6e64jf5r7bs73bfgqd0-a.oregon-postgres.render.com',
-        'PORT': '5432',
+        config = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": parsed.path.lstrip("/"),
+            "USER": parsed.username or "",
+            "PASSWORD": parsed.password or "",
+            "HOST": parsed.hostname or "",
+            "PORT": str(parsed.port or ""),
+            "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
+        }
+
+        if sslmode:
+            config["OPTIONS"] = {"sslmode": sslmode}
+
+        return config
+
+    return {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
+
+
+DATABASES = {
+    "default": _database_config(),
 }
 
 
