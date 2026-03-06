@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -112,6 +113,11 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 
 def _database_config():
     database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url and not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL is required when DJANGO_DEBUG is False."
+        )
+
     if database_url:
         parsed = urlparse(database_url)
         query_params = parse_qs(parsed.query)
