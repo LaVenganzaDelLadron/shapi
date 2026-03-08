@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,6 +26,11 @@ SECRET_KEY = os.environ.get(
     "DJANGO_SECRET_KEY",
     "django-insecure-%66a51-3x78bu!hk-5i92%vwei6o61#o-k62(gs$3f3y^zsb)c",
 )
+SECRET_KEY_FALLBACKS = [
+    key.strip()
+    for key in os.environ.get("DJANGO_SECRET_KEY_FALLBACKS", "").split(",")
+    if key.strip()
+]
 
 # SECURITY WARNING: don't run with debug turned on in production!
 running_on_render = os.environ.get("RENDER", "").strip().lower() == "true"
@@ -139,21 +143,16 @@ def _database_config():
 
         return config
 
-    if running_on_render:
-        raise ImproperlyConfigured(
-            "DATABASE_URL is required on Render. "
-            "Use a linked Render Postgres connection string, not DB_HOST/DB_PORT variables."
-        )
-
     db_name = os.environ.get("DB_NAME", "").strip()
     db_user = os.environ.get("DB_USER", "").strip()
     db_password = os.environ.get("DB_PASSWORD", "").strip()
     db_host = os.environ.get("DB_HOST", "").strip()
     db_port = os.environ.get("DB_PORT", "5432").strip()
+    db_engine = os.environ.get("DB_ENGINE", "django.db.backends.postgresql").strip()
 
     if all([db_name, db_user, db_password, db_host, db_port]):
         config = {
-            "ENGINE": "django.db.backends.postgresql",
+            "ENGINE": db_engine,
             "NAME": db_name,
             "USER": db_user,
             "PASSWORD": db_password,
@@ -165,12 +164,6 @@ def _database_config():
         if sslmode:
             config["OPTIONS"] = {"sslmode": sslmode}
         return config
-
-    if not database_url and (not DEBUG or running_on_render):
-        raise ImproperlyConfigured(
-            "Database config is required in production/Render. "
-            "Set DATABASE_URL or all DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT."
-        )
 
     return {
         "ENGINE": "django.db.backends.sqlite3",
