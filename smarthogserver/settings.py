@@ -114,11 +114,11 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 
 def _database_config():
     database_url = os.environ.get("DATABASE_URL", "").strip()
-    if not database_url and (not DEBUG or running_on_render):
-        raise ImproperlyConfigured(
-            "DATABASE_URL is required in production/Render. "
-            "Using sqlite on Render will lose data after restarts/deploys."
-        )
+    db_name = os.environ.get("DB_NAME", "").strip()
+    db_user = os.environ.get("DB_USER", "").strip()
+    db_password = os.environ.get("DB_PASSWORD", "").strip()
+    db_host = os.environ.get("DB_HOST", "").strip()
+    db_port = os.environ.get("DB_PORT", "").strip()
 
     if database_url:
         parsed = urlparse(database_url)
@@ -142,6 +142,27 @@ def _database_config():
             config["OPTIONS"] = {"sslmode": sslmode}
 
         return config
+
+    if all([db_name, db_user, db_password, db_host, db_port]):
+        config = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": db_name,
+            "USER": db_user,
+            "PASSWORD": db_password,
+            "HOST": db_host,
+            "PORT": db_port,
+            "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
+        }
+        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "require").strip()
+        if sslmode:
+            config["OPTIONS"] = {"sslmode": sslmode}
+        return config
+
+    if not database_url and (not DEBUG or running_on_render):
+        raise ImproperlyConfigured(
+            "Database config is required in production/Render. "
+            "Set DATABASE_URL or all DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT."
+        )
 
     return {
         "ENGINE": "django.db.backends.sqlite3",
