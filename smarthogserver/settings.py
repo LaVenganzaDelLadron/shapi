@@ -114,18 +114,14 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 
 def _database_config():
     database_url = os.environ.get("DATABASE_URL", "").strip()
-    db_name = os.environ.get("DB_NAME", "").strip()
-    db_user = os.environ.get("DB_USER", "").strip()
-    db_password = os.environ.get("DB_PASSWORD", "").strip()
-    db_host = os.environ.get("DB_HOST", "").strip()
-    db_port = os.environ.get("DB_PORT", "").strip()
+    conn_max_age = int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600"))
 
     if database_url:
         parsed = urlparse(database_url)
         query_params = parse_qs(parsed.query)
         sslmode = (
             os.environ.get("DJANGO_DB_SSLMODE", "").strip()
-            or (query_params.get("sslmode", [None])[0] or "require")
+            or (query_params.get("sslmode", [None])[0] or "prefer")
         )
 
         config = {
@@ -134,14 +130,26 @@ def _database_config():
             "USER": parsed.username or "",
             "PASSWORD": parsed.password or "",
             "HOST": parsed.hostname or "",
-            "PORT": str(parsed.port or ""),
-            "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
+            "PORT": str(parsed.port or 5432),
+            "CONN_MAX_AGE": conn_max_age,
         }
 
         if sslmode:
             config["OPTIONS"] = {"sslmode": sslmode}
 
         return config
+
+    if running_on_render:
+        raise ImproperlyConfigured(
+            "DATABASE_URL is required on Render. "
+            "Use a linked Render Postgres connection string, not DB_HOST/DB_PORT variables."
+        )
+
+    db_name = os.environ.get("DB_NAME", "").strip()
+    db_user = os.environ.get("DB_USER", "").strip()
+    db_password = os.environ.get("DB_PASSWORD", "").strip()
+    db_host = os.environ.get("DB_HOST", "").strip()
+    db_port = os.environ.get("DB_PORT", "5432").strip()
 
     if all([db_name, db_user, db_password, db_host, db_port]):
         config = {
@@ -151,9 +159,9 @@ def _database_config():
             "PASSWORD": db_password,
             "HOST": db_host,
             "PORT": db_port,
-            "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
+            "CONN_MAX_AGE": conn_max_age,
         }
-        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "require").strip()
+        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "prefer").strip()
         if sslmode:
             config["OPTIONS"] = {"sslmode": sslmode}
         return config
