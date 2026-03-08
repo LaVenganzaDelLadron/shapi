@@ -29,7 +29,8 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
+running_on_render = os.environ.get("RENDER", "").strip().lower() == "true"
+DEBUG = os.environ.get("DJANGO_DEBUG", "False" if running_on_render else "True").lower() == "true"
 
 allowed_hosts_raw = os.environ.get(
     "DJANGO_ALLOWED_HOSTS",
@@ -113,9 +114,10 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 
 def _database_config():
     database_url = os.environ.get("DATABASE_URL", "").strip()
-    if not database_url and not DEBUG:
+    if not database_url and (not DEBUG or running_on_render):
         raise ImproperlyConfigured(
-            "DATABASE_URL is required when DJANGO_DEBUG is False."
+            "DATABASE_URL is required in production/Render. "
+            "Using sqlite on Render will lose data after restarts/deploys."
         )
 
     if database_url:
