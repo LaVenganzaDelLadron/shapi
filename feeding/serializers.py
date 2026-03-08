@@ -25,7 +25,7 @@ class FeedingSerializer(serializers.ModelSerializer):
             'feed_code',
             'feed_quantity',
             'feed_time',
-            'feed_type',
+            'growth_code',
             'batch_code',
             'device_code',
             'pen_code',
