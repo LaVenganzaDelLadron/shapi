@@ -22,5 +22,3 @@ services:
         fromDatabase:
           name: shapi-db
           property: connectionString
-      - key: DJANGO_DB_SSLMODE
-        value: require

@@ -125,7 +125,7 @@ def _database_config():
         query_params = parse_qs(parsed.query)
         sslmode = (
             os.environ.get("DJANGO_DB_SSLMODE", "").strip()
-            or (query_params.get("sslmode", [None])[0] or "require")
+            or (query_params.get("sslmode", [None])[0] or "prefer")
         )
 
         config = {
@@ -153,7 +153,7 @@ def _database_config():
             "PORT": db_port,
             "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
         }
-        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "require").strip()
+        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "prefer").strip()
         if sslmode:
             config["OPTIONS"] = {"sslmode": sslmode}
         return config
