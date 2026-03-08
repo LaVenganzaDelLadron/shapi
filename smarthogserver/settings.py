@@ -114,13 +114,19 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 
 def _database_config():
     database_url = os.environ.get("DATABASE_URL", "").strip()
-    sslmode_default = os.environ.get("DJANGO_DB_SSLMODE", "prefer").strip()
-    conn_max_age = int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600"))
+    db_name = os.environ.get("DB_NAME", "").strip()
+    db_user = os.environ.get("DB_USER", "").strip()
+    db_password = os.environ.get("DB_PASSWORD", "").strip()
+    db_host = os.environ.get("DB_HOST", "").strip()
+    db_port = os.environ.get("DB_PORT", "").strip()
 
     if database_url:
         parsed = urlparse(database_url)
         query_params = parse_qs(parsed.query)
-        sslmode = sslmode_default or query_params.get("sslmode", [None])[0] or "prefer"
+        sslmode = (
+            os.environ.get("DJANGO_DB_SSLMODE", "").strip()
+            or (query_params.get("sslmode", [None])[0] or "require")
+        )
 
         config = {
             "ENGINE": "django.db.backends.postgresql",
@@ -128,28 +134,29 @@ def _database_config():
             "USER": parsed.username or "",
             "PASSWORD": parsed.password or "",
             "HOST": parsed.hostname or "",
-            "PORT": str(parsed.port or 5432),
-            "CONN_MAX_AGE": conn_max_age,
-            "OPTIONS": {"sslmode": sslmode},
+            "PORT": str(parsed.port or ""),
+            "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
         }
+
+        if sslmode:
+            config["OPTIONS"] = {"sslmode": sslmode}
+
         return config
 
-    db_name = os.environ.get("DB_NAME", "").strip()
-    db_user = os.environ.get("DB_USER", "").strip()
-    db_password = os.environ.get("DB_PASSWORD", "").strip()
-    db_host = os.environ.get("DB_HOST", "").strip()
-    db_port = os.environ.get("DB_PORT", "5432").strip()
-    if all([db_name, db_user, db_password, db_host]):
-        return {
+    if all([db_name, db_user, db_password, db_host, db_port]):
+        config = {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": db_name,
             "USER": db_user,
             "PASSWORD": db_password,
             "HOST": db_host,
             "PORT": db_port,
-            "CONN_MAX_AGE": conn_max_age,
-            "OPTIONS": {"sslmode": sslmode_default or "prefer"},
+            "CONN_MAX_AGE": int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600")),
         }
+        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "require").strip()
+        if sslmode:
+            config["OPTIONS"] = {"sslmode": sslmode}
+        return config
 
     if not database_url and (not DEBUG or running_on_render):
         raise ImproperlyConfigured(
