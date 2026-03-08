@@ -119,13 +119,14 @@ WSGI_APPLICATION = 'smarthogserver.wsgi.application'
 def _database_config():
     database_url = os.environ.get("DATABASE_URL", "").strip()
     conn_max_age = int(os.environ.get("DJANGO_DB_CONN_MAX_AGE", "600"))
+    default_sslmode = "require" if running_on_render else "prefer"
 
     if database_url:
         parsed = urlparse(database_url)
         query_params = parse_qs(parsed.query)
         sslmode = (
             os.environ.get("DJANGO_DB_SSLMODE", "").strip()
-            or (query_params.get("sslmode", [None])[0] or "prefer")
+            or (query_params.get("sslmode", [None])[0] or default_sslmode)
         )
 
         config = {
@@ -160,7 +161,7 @@ def _database_config():
             "PORT": db_port,
             "CONN_MAX_AGE": conn_max_age,
         }
-        sslmode = os.environ.get("DJANGO_DB_SSLMODE", "prefer").strip()
+        sslmode = os.environ.get("DJANGO_DB_SSLMODE", default_sslmode).strip()
         if sslmode:
             config["OPTIONS"] = {"sslmode": sslmode}
         return config
