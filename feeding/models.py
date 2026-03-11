@@ -15,6 +15,7 @@ class Feeding(models.Model):
     feed_code = models.CharField(max_length=120, unique=True)
     feed_quantity = models.FloatField()
     feed_time = models.DateTimeField()
+    repeat_days = models.CharField(max_length=120, blank=True, null=True)
     feed_type = models.CharField(max_length=20, choices=feed_type_choices)
     growth_stage = models.ForeignKey('growth.GrowthStage',on_delete=models.CASCADE)
     batch_code = models.ForeignKey('batch.PigBatches', on_delete=models.CASCADE)

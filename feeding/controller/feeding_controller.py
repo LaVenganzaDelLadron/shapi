@@ -32,6 +32,10 @@ class FeedingController(APIView):
             payload['device_code'] = payload.pop('device_code_id')
         if 'pen_code' not in payload and 'pen_code_id' in payload:
             payload['pen_code'] = payload.pop('pen_code_id')
+        if 'repeat_days' not in payload:
+            payload['repeat_days'] = None
+        if 'date' not in payload and 'feed_time' in payload:
+            payload['date'] = payload['feed_time']
 
         serializer = FeedingSerializer(data=payload)
         if serializer.is_valid():
