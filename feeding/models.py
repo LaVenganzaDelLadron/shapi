@@ -3,9 +3,18 @@ from django.db import models
 
 
 class Feeding(models.Model):
+    feed_type_choices = [
+        ('automatic', 'Automatic'),
+        ('manual', 'Manual'),
+        ('override', 'Override'),
+        ('emergency', 'Emergency'),
+        ('test', 'Test'),
+    ]
+
     feed_code = models.CharField(max_length=120, unique=True)
     feed_quantity = models.FloatField()
     feed_time = models.DateTimeField()
+    feed_type = models.CharField(max_length=20, choices=feed_type_choices)
     growth_stage = models.ForeignKey('growth.GrowthStage',on_delete=models.CASCADE)
     batch_code = models.ForeignKey('batch.PigBatches', on_delete=models.CASCADE)
     device_code = models.ForeignKey('device.Device', on_delete=models.CASCADE)
