@@ -1,4 +1,5 @@
 from django.db import models
+import re
 
 
 
@@ -20,6 +21,25 @@ class Feeding(models.Model):
     device_code = models.ForeignKey('device.Device', on_delete=models.CASCADE)
     pen_code = models.ForeignKey('pen.Pen', on_delete=models.CASCADE)
     date = models.DateTimeField()
+
+    @classmethod
+    def generate_next_feed_code(cls):
+        prefix = 'FEED'
+        pattern = re.compile(rf'^{prefix}(\d+)$')
+        max_number = 0
+
+        codes = cls.objects.filter(feed_code__startswith=prefix).values_list('feed_code', flat=True)
+        for code in codes:
+            match = pattern.match(code)
+            if match:
+                max_number = max(max_number, int(match.group(1)))
+
+        return f'{prefix}{max_number + 1:03d}'
+
+    def save(self, *args, **kwargs):
+        if not self.feed_code:
+            self.feed_code = self.generate_next_feed_code()
+        super().save(*args, **kwargs)
 
 
 
