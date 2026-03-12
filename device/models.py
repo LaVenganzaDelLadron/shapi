@@ -10,11 +10,11 @@ class Device(models.Model):
 
     @classmethod
     def generate_next_batch_code(cls):
-        prefix = 'BATCH'
+        prefix = 'DEV'
         pattern = re.compile(rf'^{prefix}(\d+)$')
         max_number = 0
 
-        codes = cls.objects.filter(pen_code__startswith=prefix).values_list('batch_code', flat=True)
+        codes = cls.objects.filter(device_code__startswith=prefix).values_list('device_code', flat=True)
         for code in codes:
             match = pattern.match(code)
             if match:
@@ -23,8 +23,8 @@ class Device(models.Model):
         return f'{prefix}{max_number + 1:03d}'
         
     def save(self, *args, **kwargs):
-        if not self.pen_code:
-            self.pen_code = self.generate_next_batch_code()
+        if not self.device_code:
+            self.device_code = self.generate_next_batch_code()
         super().save(*args, **kwargs)
 
     def __str__(self):
