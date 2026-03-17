@@ -2,7 +2,6 @@ from django.db import models
 import re
 
 
-
 class Feeding(models.Model):
     feed_type_choices = [
         ('automatic', 'Automatic'),
@@ -12,7 +11,7 @@ class Feeding(models.Model):
         ('test', 'Test'),
     ]
 
-    feed_code = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    feed_code = models.CharField(max_length=120, unique=True, blank=True)
     feed_quantity = models.FloatField()
     feed_time = models.DateTimeField()
     repeat_days = models.CharField(max_length=120, blank=True, null=True)
@@ -41,8 +40,6 @@ class Feeding(models.Model):
         if not self.feed_code:
             self.feed_code = self.generate_next_feed_code()
         super().save(*args, **kwargs)
-
-
 
     def __str__(self):
         return f"{self.feed_code} {self.feed_quantity} {self.feed_type}"
