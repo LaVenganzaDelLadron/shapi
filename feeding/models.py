@@ -12,7 +12,7 @@ class Feeding(models.Model):
         ('test', 'Test'),
     ]
 
-    feed_code = models.CharField(max_length=120, unique=True)
+    feed_code = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     feed_quantity = models.FloatField()
     feed_time = models.DateTimeField()
     repeat_days = models.CharField(max_length=120, blank=True, null=True)
