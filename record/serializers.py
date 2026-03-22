@@ -18,3 +18,6 @@ class RecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = Record
         fields = ('record_code', 'batch_code', 'pig_age_days', 'avg_weight', 'growth_stage', 'date')
+        extra_kwargs = {
+            'record_code': {'read_only': True},
+        }
