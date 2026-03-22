@@ -70,7 +70,6 @@ INSTALLED_APPS = [
     'device',
     'feeding',
     'record',
-    'dm',
 ]
 
 MIDDLEWARE = [
