@@ -42,6 +42,11 @@ class RecordController(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
+        if serializer.errors.get('message') == ['Record already exists.']:
+            return Response(
+                {'message': 'Record already exists.'},
+                status=status.HTTP_409_CONFLICT,
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
