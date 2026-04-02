@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'device',
     'feeding',
     'record',
+    'datamining',
 ]
 
 MIDDLEWARE = [

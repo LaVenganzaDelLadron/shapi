@@ -14,6 +14,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Datamining',
             fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('datamining_code', models.CharField(max_length=120)),
                 ('pig_age_days', models.CharField(max_length=120)),
                 ('avg_weight', models.CharField(max_length=120)),
                 ('feed_quantity', models.CharField(max_length=120)),

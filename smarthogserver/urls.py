@@ -10,4 +10,5 @@ urlpatterns = [
     path('device/', include('device.urls')),
     path('feeding/', include('feeding.urls')),
     path('record/', include('record.urls')),
+    path('datamining/', include('datamining.urls')),
 ]
