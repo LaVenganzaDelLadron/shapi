@@ -33,6 +33,9 @@ class Pen(models.Model):
         if not self.pen_code:
             self.pen_code = self.generate_next_pen_code()
         super().save(*args, **kwargs)
+        from pen.services import sync_pen_statuses
+
+        sync_pen_statuses([self.pen_code])
 
     def __str__(self):
         return f'{self.pen_code} {self.pen_name}'
