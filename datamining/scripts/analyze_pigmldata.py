@@ -10,9 +10,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    mean_absolute_error,
+    mean_squared_error,
+    precision_recall_fscore_support,
+    r2_score,
+)
 from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
@@ -46,13 +54,23 @@ NUMERIC_COLUMNS = [
     'window_days',
 ]
 
-FEATURE_COLUMNS = [
+NUMERIC_FEATURE_COLUMNS = [
     'pig_age_days',
-    'feeding_count',
     'total_feed_quantity',
+    'feeding_count',
     'avg_feeding_interval_hours',
+    'pen_capacity',
+    'window_days',
 ]
 
+CATEGORICAL_FEATURE_COLUMNS = [
+    'pen_status',
+    'growth_stage',
+]
+
+MODEL_FEATURE_COLUMNS = NUMERIC_FEATURE_COLUMNS + CATEGORICAL_FEATURE_COLUMNS
+KNN_NEIGHBORS = [3, 5, 7, 9, 11]
+KNN_WEIGHTS = ['uniform', 'distance']
 GROWTH_STAGE_ORDER = ['HOGPRE', 'STARTER', 'GROWER', 'FINISHER']
 
 
@@ -181,6 +199,39 @@ def describe_correlation(value):
     return f'{strength} {direction}'
 
 
+def add_classification_targets(dataframe):
+    dataframe = dataframe.copy()
+    if 'expected_weight_by_age' not in dataframe.columns:
+        age_baseline = LinearRegression()
+        age_baseline.fit(dataframe[['pig_age_days']], dataframe['avg_weight'])
+        dataframe['expected_weight_by_age'] = age_baseline.predict(dataframe[['pig_age_days']])
+
+    dataframe['weight_residual'] = dataframe['avg_weight'] - dataframe['expected_weight_by_age']
+
+    lower_threshold = dataframe['weight_residual'].quantile(0.33)
+    upper_threshold = dataframe['weight_residual'].quantile(0.67)
+
+    dataframe['weight_class'] = np.select(
+        [
+            dataframe['weight_residual'] <= lower_threshold,
+            dataframe['weight_residual'] >= upper_threshold,
+        ],
+        ['underweight', 'above_target'],
+        default='normal',
+    )
+    dataframe['low_growth_risk'] = np.where(
+        dataframe['weight_class'] == 'underweight',
+        'at_risk',
+        'on_track',
+    )
+    dataframe['below_expected_weight_for_age'] = np.where(
+        dataframe['weight_residual'] < 0,
+        'below_expected',
+        'on_or_above_expected',
+    )
+    return dataframe
+
+
 def diagnostic_analytics(dataframe, output_dir, show_plots):
     print_section('DIAGNOSTIC ANALYTICS')
 
@@ -303,24 +354,56 @@ def diagnostic_analytics(dataframe, output_dir, show_plots):
     else:
         print(anomalies.round(2).to_string(index=False))
 
-    return dataframe
+    return add_classification_targets(dataframe)
 
 
-def build_models(dataframe):
-    dataset = dataframe.dropna(subset=FEATURE_COLUMNS + ['avg_weight']).copy()
-    if len(dataset) < 10:
-        raise ValueError('At least 10 clean rows are needed for model training.')
+def prepare_feature_matrix(dataframe):
+    feature_frame = dataframe[MODEL_FEATURE_COLUMNS].copy()
+    for column in CATEGORICAL_FEATURE_COLUMNS:
+        feature_frame[column] = feature_frame[column].astype(str)
+    return pd.get_dummies(feature_frame, columns=CATEGORICAL_FEATURE_COLUMNS, dtype=float)
 
-    features = dataset[FEATURE_COLUMNS]
-    target = dataset['avg_weight']
 
-    x_train, x_test, y_train, y_test = train_test_split(
-        features,
-        target,
-        test_size=0.2,
-        random_state=42,
-    )
+def align_feature_matrix(dataframe, reference_columns):
+    aligned = prepare_feature_matrix(dataframe)
+    return aligned.reindex(columns=reference_columns, fill_value=0.0)
 
+
+def aggregate_feature_scores(raw_scores):
+    aggregated_scores = {}
+    for encoded_column, value in raw_scores.items():
+        matched = False
+        for base_feature in CATEGORICAL_FEATURE_COLUMNS:
+            prefix = f'{base_feature}_'
+            if encoded_column.startswith(prefix):
+                aggregated_scores[base_feature] = aggregated_scores.get(base_feature, 0.0) + abs(float(value))
+                matched = True
+                break
+        if not matched:
+            aggregated_scores[encoded_column] = aggregated_scores.get(encoded_column, 0.0) + abs(float(value))
+    return pd.Series(aggregated_scores).sort_values(ascending=False)
+
+
+def extract_feature_importance(model, encoded_columns):
+    final_model = model.named_steps['model'] if isinstance(model, Pipeline) else model
+
+    if hasattr(final_model, 'feature_importances_'):
+        raw_scores = pd.Series(final_model.feature_importances_, index=encoded_columns)
+        return aggregate_feature_scores(raw_scores)
+
+    if hasattr(final_model, 'coef_'):
+        coefficients = np.asarray(final_model.coef_)
+        if coefficients.ndim > 1:
+            coefficients = np.mean(np.abs(coefficients), axis=0)
+        else:
+            coefficients = np.abs(coefficients)
+        raw_scores = pd.Series(coefficients, index=encoded_columns)
+        return aggregate_feature_scores(raw_scores)
+
+    return None
+
+
+def build_regression_models():
     models = {
         'Linear Regression': Pipeline(
             [
@@ -328,12 +411,12 @@ def build_models(dataframe):
                 ('model', LinearRegression()),
             ]
         ),
-        'Decision Tree': DecisionTreeRegressor(
+        'Decision Tree Regressor': DecisionTreeRegressor(
             random_state=42,
-            max_depth=5,
+            max_depth=6,
             min_samples_leaf=3,
         ),
-        'Random Forest': RandomForestRegressor(
+        'Random Forest Regressor': RandomForestRegressor(
             random_state=42,
             n_estimators=300,
             max_depth=8,
@@ -342,100 +425,246 @@ def build_models(dataframe):
         ),
     }
 
-    results = []
-    trained_models = {}
-    predictions = {}
+    for neighbors in KNN_NEIGHBORS:
+        for weights in KNN_WEIGHTS:
+            models[f'KNN Regressor (k={neighbors}, weights={weights})'] = Pipeline(
+                [
+                    ('scaler', StandardScaler()),
+                    ('model', KNeighborsRegressor(n_neighbors=neighbors, weights=weights)),
+                ]
+            )
 
-    for model_name, model in models.items():
+    return models
+
+
+def regression_analytics_module(dataframe, output_dir, show_plots, prediction_sample):
+    print_section('REGRESSION ANALYTICS MODULE')
+
+    dataset = dataframe.dropna(subset=MODEL_FEATURE_COLUMNS + ['avg_weight']).copy()
+    if len(dataset) < 10:
+        raise ValueError('At least 10 clean rows are needed for regression training.')
+
+    encoded_features = prepare_feature_matrix(dataset)
+    target = dataset['avg_weight']
+
+    x_train, x_test, y_train, y_test = train_test_split(
+        encoded_features,
+        target,
+        test_size=0.2,
+        random_state=42,
+    )
+
+    model_library = build_regression_models()
+    trained_models = {}
+    test_predictions = {}
+    results = []
+
+    for model_name, model in model_library.items():
         model.fit(x_train, y_train)
         predicted = model.predict(x_test)
-        rmse = float(np.sqrt(mean_squared_error(y_test, predicted)))
-        score = r2_score(y_test, predicted)
-        results.append({'model': model_name, 'r2_score': score, 'rmse': rmse})
         trained_models[model_name] = model
-        predictions[model_name] = predicted
+        test_predictions[model_name] = predicted
+        results.append(
+            {
+                'model': model_name,
+                'r2_score': r2_score(y_test, predicted),
+                'rmse': float(np.sqrt(mean_squared_error(y_test, predicted))),
+                'mae': mean_absolute_error(y_test, predicted),
+            }
+        )
 
-    results_frame = pd.DataFrame(results).sort_values('r2_score', ascending=False).reset_index(drop=True)
+    results_frame = pd.DataFrame(results).sort_values(
+        ['r2_score', 'rmse', 'mae'],
+        ascending=[False, True, True],
+    ).reset_index(drop=True)
+
     best_model_name = results_frame.iloc[0]['model']
-    best_model = trained_models[best_model_name]
+    best_model = model_library[best_model_name]
+    best_model.fit(encoded_features, target)
 
-    best_model.fit(features, target)
-
-    return {
-        'results_frame': results_frame,
-        'best_model_name': best_model_name,
-        'best_model': best_model,
-        'x_test': x_test,
-        'y_test': y_test,
-        'test_predictions': predictions[best_model_name],
-    }
-
-
-def extract_feature_importance(best_model):
-    if isinstance(best_model, Pipeline):
-        final_model = best_model.named_steps['model']
-        if hasattr(final_model, 'coef_'):
-            return pd.Series(np.abs(final_model.coef_), index=FEATURE_COLUMNS).sort_values(ascending=False)
-        if hasattr(final_model, 'feature_importances_'):
-            return pd.Series(final_model.feature_importances_, index=FEATURE_COLUMNS).sort_values(ascending=False)
-        return None
-
-    if hasattr(best_model, 'feature_importances_'):
-        return pd.Series(best_model.feature_importances_, index=FEATURE_COLUMNS).sort_values(ascending=False)
-    if hasattr(best_model, 'coef_'):
-        return pd.Series(np.abs(best_model.coef_), index=FEATURE_COLUMNS).sort_values(ascending=False)
-    return None
-
-
-def predictive_analytics(dataframe, output_dir, show_plots, prediction_sample):
-    print_section('PREDICTIVE ANALYTICS')
-    model_bundle = build_models(dataframe)
-    results_frame = model_bundle['results_frame']
-    best_model_name = model_bundle['best_model_name']
-    best_model = model_bundle['best_model']
-
-    print('Model comparison:')
+    print('Regression model comparison:')
     print(results_frame.round(4).to_string(index=False))
-    print(f'\nBest model selected: {best_model_name}')
+    print(f'\nBest regression model: {best_model_name}')
 
-    sample_frame = pd.DataFrame([prediction_sample], columns=FEATURE_COLUMNS)
-    predicted_weight = float(best_model.predict(sample_frame)[0])
+    sample_frame = pd.DataFrame([prediction_sample], columns=MODEL_FEATURE_COLUMNS)
+    aligned_sample = align_feature_matrix(sample_frame, encoded_features.columns)
+    predicted_weight = float(best_model.predict(aligned_sample)[0])
     print('\nFuture weight prediction for sample input:')
     print(json.dumps({**prediction_sample, 'predicted_avg_weight': round(predicted_weight, 2)}, indent=2))
 
-    importance = extract_feature_importance(best_model)
-    if importance is not None:
-        print('\nFeature importance:')
-        print(importance.round(4).to_string())
+    feature_importance = extract_feature_importance(best_model, encoded_features.columns)
+    if feature_importance is not None:
+        print('\nRegression feature importance:')
+        print(feature_importance.round(4).to_string())
 
         plt.figure(figsize=(8, 5))
-        importance.sort_values().plot(kind='barh', color='#4C956C')
-        plt.title(f'Feature Importance - {best_model_name}')
+        feature_importance.sort_values().plot(kind='barh', color='#4C956C')
+        plt.title(f'Regression Feature Importance - {best_model_name}')
         plt.xlabel('Importance Score')
-        save_plot(output_dir, 'predictive_feature_importance.png', show_plots)
+        save_plot(output_dir, 'regression_feature_importance.png', show_plots)
 
+    plt.figure(figsize=(11, 5))
+    plt.bar(results_frame['model'], results_frame['r2_score'], color='#2C7DA0')
+    plt.title('Regression Model Comparison by R² Score')
+    plt.xlabel('Model')
+    plt.ylabel('R² Score')
+    plt.xticks(rotation=35, ha='right')
+    save_plot(output_dir, 'regression_model_comparison.png', show_plots)
+
+    best_test_predictions = test_predictions[best_model_name]
     plt.figure(figsize=(7, 6))
     plt.scatter(
-        model_bundle['y_test'],
-        model_bundle['test_predictions'],
+        y_test,
+        best_test_predictions,
         color='#2C7DA0',
         alpha=0.7,
         edgecolors='black',
         linewidths=0.3,
     )
-    min_value = min(model_bundle['y_test'].min(), model_bundle['test_predictions'].min())
-    max_value = max(model_bundle['y_test'].max(), model_bundle['test_predictions'].max())
+    min_value = min(y_test.min(), best_test_predictions.min())
+    max_value = max(y_test.max(), best_test_predictions.max())
     plt.plot([min_value, max_value], [min_value, max_value], color='#D1495B', linestyle='--')
     plt.title(f'Actual vs Predicted Weight ({best_model_name})')
     plt.xlabel('Actual Weight (kg)')
     plt.ylabel('Predicted Weight (kg)')
-    save_plot(output_dir, 'predictive_actual_vs_predicted.png', show_plots)
+    save_plot(output_dir, 'regression_actual_vs_predicted.png', show_plots)
 
     return {
         'best_model': best_model,
         'best_model_name': best_model_name,
+        'feature_columns': encoded_features.columns.tolist(),
+        'results_frame': results_frame,
         'predicted_weight': predicted_weight,
-        'feature_importance': importance,
+    }
+
+
+def build_classification_models():
+    models = {
+        'Logistic Regression': Pipeline(
+            [
+                ('scaler', StandardScaler()),
+                ('model', LogisticRegression(max_iter=2000)),
+            ]
+        ),
+    }
+
+    for neighbors in KNN_NEIGHBORS:
+        for weights in KNN_WEIGHTS:
+            models[f'KNN Classifier (k={neighbors}, weights={weights})'] = Pipeline(
+                [
+                    ('scaler', StandardScaler()),
+                    ('model', KNeighborsClassifier(n_neighbors=neighbors, weights=weights)),
+                ]
+            )
+
+    return models
+
+
+def classification_analytics_module(dataframe, output_dir, show_plots, classification_target):
+    print_section('CLASSIFICATION ANALYTICS MODULE')
+    print(f'Classification target: {classification_target}')
+
+    dataset = dataframe.dropna(subset=MODEL_FEATURE_COLUMNS + [classification_target]).copy()
+    if len(dataset) < 10:
+        raise ValueError('At least 10 clean rows are needed for classification training.')
+
+    encoded_features = prepare_feature_matrix(dataset)
+    target = dataset[classification_target].astype(str)
+    class_counts = target.value_counts().sort_index()
+    print('\nTarget class distribution:')
+    print(class_counts.to_string())
+
+    if target.nunique() < 2:
+        raise ValueError(f'Target "{classification_target}" must contain at least two classes.')
+
+    stratify_target = target if class_counts.min() >= 2 else None
+    x_train, x_test, y_train, y_test = train_test_split(
+        encoded_features,
+        target,
+        test_size=0.2,
+        random_state=42,
+        stratify=stratify_target,
+    )
+
+    model_library = build_classification_models()
+    trained_models = {}
+    confusion_matrices = {}
+    evaluation_rows = []
+    labels = sorted(target.unique().tolist())
+
+    for model_name, model in model_library.items():
+        model.fit(x_train, y_train)
+        predicted = model.predict(x_test)
+        trained_models[model_name] = model
+        confusion_matrices[model_name] = confusion_matrix(y_test, predicted, labels=labels)
+        precision, recall, f1_score, _ = precision_recall_fscore_support(
+            y_test,
+            predicted,
+            average='weighted',
+            zero_division=0,
+        )
+        evaluation_rows.append(
+            {
+                'model': model_name,
+                'accuracy': accuracy_score(y_test, predicted),
+                'precision': precision,
+                'recall': recall,
+                'f1_score': f1_score,
+            }
+        )
+
+    results_frame = pd.DataFrame(evaluation_rows).sort_values(
+        ['f1_score', 'accuracy', 'precision', 'recall'],
+        ascending=[False, False, False, False],
+    ).reset_index(drop=True)
+
+    best_model_name = results_frame.iloc[0]['model']
+    best_model = model_library[best_model_name]
+    best_model.fit(encoded_features, target)
+
+    print('\nClassification model comparison:')
+    print(results_frame.round(4).to_string(index=False))
+    print(f'\nBest classification model: {best_model_name}')
+
+    best_confusion_matrix = confusion_matrices[best_model_name]
+    confusion_frame = pd.DataFrame(best_confusion_matrix, index=labels, columns=labels)
+    print('\nConfusion matrix for best classification model:')
+    print(confusion_frame.to_string())
+
+    plt.figure(figsize=(11, 5))
+    plt.bar(results_frame['model'], results_frame['f1_score'], color='#D1495B')
+    plt.title('Classification Model Comparison by Weighted F1 Score')
+    plt.xlabel('Model')
+    plt.ylabel('Weighted F1 Score')
+    plt.xticks(rotation=35, ha='right')
+    save_plot(output_dir, 'classification_model_comparison.png', show_plots)
+
+    figure, axis = plt.subplots(figsize=(7, 6))
+    image = axis.imshow(best_confusion_matrix, cmap='Blues')
+    axis.set_xticks(range(len(labels)))
+    axis.set_yticks(range(len(labels)))
+    axis.set_xticklabels(labels, rotation=30, ha='right')
+    axis.set_yticklabels(labels)
+    axis.set_xlabel('Predicted Label')
+    axis.set_ylabel('True Label')
+    axis.set_title(f'Confusion Matrix - {best_model_name}')
+    for row_index in range(len(labels)):
+        for col_index in range(len(labels)):
+            axis.text(
+                col_index,
+                row_index,
+                str(best_confusion_matrix[row_index, col_index]),
+                ha='center',
+                va='center',
+                color='black',
+            )
+    figure.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
+    save_plot(output_dir, 'classification_confusion_matrix.png', show_plots)
+
+    return {
+        'best_model_name': best_model_name,
+        'results_frame': results_frame,
+        'confusion_matrix': confusion_frame,
     }
 
 
@@ -460,15 +689,23 @@ def build_default_prediction_sample(dataframe):
     else:
         avg_interval = round(float(interval_subset['avg_feeding_interval_hours'].median()), 2)
 
+    pen_capacity = int(round(dataframe['pen_capacity'].median()))
+    pen_status = str(dataframe['pen_status'].mode().iloc[0])
+    window_days = int(dataframe['window_days'].mode().iloc[0])
+
     return {
         'pig_age_days': age_value,
-        'feeding_count': feeding_count,
         'total_feed_quantity': total_feed_quantity,
+        'feeding_count': feeding_count,
         'avg_feeding_interval_hours': avg_interval,
+        'pen_capacity': pen_capacity,
+        'pen_status': pen_status,
+        'growth_stage': infer_growth_stage(age_value),
+        'window_days': window_days,
     }
 
 
-def prescriptive_analytics(dataframe, best_model, baseline_sample):
+def prescriptive_analytics(dataframe, best_model, feature_columns, baseline_sample):
     print_section('PRESCRIPTIVE ANALYTICS')
 
     target_age = baseline_sample['pig_age_days']
@@ -491,12 +728,15 @@ def prescriptive_analytics(dataframe, best_model, baseline_sample):
 
         for total_feed_quantity in feed_quantity_range:
             candidate = {
-                'pig_age_days': target_age,
+                **baseline_sample,
+                'pig_age_days': int(target_age),
+                'growth_stage': infer_growth_stage(target_age),
                 'feeding_count': int(feeding_count),
                 'total_feed_quantity': round(float(total_feed_quantity), 2),
                 'avg_feeding_interval_hours': round(interval_hours, 2),
             }
-            candidate_prediction = float(best_model.predict(pd.DataFrame([candidate]))[0])
+            candidate_features = align_feature_matrix(pd.DataFrame([candidate]), feature_columns)
+            candidate_prediction = float(best_model.predict(candidate_features)[0])
             recommendations.append({**candidate, 'predicted_avg_weight': candidate_prediction})
 
     recommendation_frame = pd.DataFrame(recommendations).sort_values(
@@ -505,7 +745,8 @@ def prescriptive_analytics(dataframe, best_model, baseline_sample):
     )
     best_recommendation = recommendation_frame.iloc[0].to_dict()
 
-    baseline_prediction = float(best_model.predict(pd.DataFrame([baseline_sample]))[0])
+    baseline_features = align_feature_matrix(pd.DataFrame([baseline_sample]), feature_columns)
+    baseline_prediction = float(best_model.predict(baseline_features)[0])
     expected_gain = best_recommendation['predicted_avg_weight'] - baseline_prediction
 
     print('Recommended operating point:')
@@ -542,8 +783,12 @@ def prescriptive_analytics(dataframe, best_model, baseline_sample):
     else:
         actions.append('Keep feed quantity steady and focus on timing consistency.')
 
-    actions.append('Prioritize pens or batches flagged as anomalies for health, feed quality, and stress checks.')
-    actions.append('Rebuild the PigMLData dataset regularly so recommendations stay aligned with recent farm behavior.')
+    if best_recommendation['pen_status'] == 'occupied':
+        actions.append('Closely monitor crowded pens because occupancy can compound feeding and growth issues.')
+    else:
+        actions.append('Keep pen conditions stable so feeding improvements are easier to validate.')
+
+    actions.append('Prioritize pigs flagged as at risk or below expected weight for additional health and feed-quality checks.')
 
     print('\nRecommended actions:')
     for action in actions:
@@ -551,18 +796,54 @@ def prescriptive_analytics(dataframe, best_model, baseline_sample):
 
 
 def parse_prediction_sample(raw_value, dataframe):
+    default_sample = build_default_prediction_sample(dataframe)
     if not raw_value:
-        return build_default_prediction_sample(dataframe)
+        return default_sample
 
-    sample = json.loads(raw_value)
-    missing_columns = [column for column in FEATURE_COLUMNS if column not in sample]
+    supplied_sample = json.loads(raw_value)
+    merged_sample = {**default_sample, **supplied_sample}
+    missing_columns = [column for column in MODEL_FEATURE_COLUMNS if column not in merged_sample]
     if missing_columns:
         raise ValueError(f'Prediction sample is missing fields: {missing_columns}')
-    return sample
+    return merged_sample
+
+
+def print_final_summary(regression_result, classification_result, classification_target):
+    print_section('FINAL SUMMARY')
+    print(f'Best regression model for avg_weight prediction: {regression_result["best_model_name"]}')
+    print(f'Best classification model for {classification_target}: {classification_result["best_model_name"]}')
+
+    regression_top = regression_result['results_frame'].iloc[0]
+    classification_top = classification_result['results_frame'].iloc[0]
+    print('\nTop regression metrics:')
+    print(
+        json.dumps(
+            {
+                'r2_score': round(float(regression_top['r2_score']), 4),
+                'rmse': round(float(regression_top['rmse']), 4),
+                'mae': round(float(regression_top['mae']), 4),
+            },
+            indent=2,
+        )
+    )
+    print('\nTop classification metrics:')
+    print(
+        json.dumps(
+            {
+                'accuracy': round(float(classification_top['accuracy']), 4),
+                'precision': round(float(classification_top['precision']), 4),
+                'recall': round(float(classification_top['recall']), 4),
+                'f1_score': round(float(classification_top['f1_score']), 4),
+            },
+            indent=2,
+        )
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Analyze SmartHog PigMLData with descriptive, diagnostic, predictive, and prescriptive analytics.')
+    parser = argparse.ArgumentParser(
+        description='Analyze SmartHog PigMLData with descriptive, diagnostic, regression, classification, and prescriptive analytics.'
+    )
     parser.add_argument(
         '--input',
         required=True,
@@ -575,7 +856,13 @@ def main():
     )
     parser.add_argument(
         '--prediction-sample',
-        help='Optional JSON object with pig_age_days, feeding_count, total_feed_quantity, and avg_feeding_interval_hours.',
+        help='Optional JSON object containing regression feature values for a future prediction sample.',
+    )
+    parser.add_argument(
+        '--classification-target',
+        default='low_growth_risk',
+        choices=['low_growth_risk', 'weight_class', 'below_expected_weight_for_age'],
+        help='Derived classification target to model.',
     )
     parser.add_argument(
         '--show-plots',
@@ -590,17 +877,25 @@ def main():
 
     descriptive_analytics(dataframe, output_dir, args.show_plots)
     diagnostic_frame = diagnostic_analytics(dataframe, output_dir, args.show_plots)
-    predictive_result = predictive_analytics(
+    regression_result = regression_analytics_module(
         diagnostic_frame,
         output_dir,
         args.show_plots,
         prediction_sample,
     )
+    classification_result = classification_analytics_module(
+        diagnostic_frame,
+        output_dir,
+        args.show_plots,
+        args.classification_target,
+    )
     prescriptive_analytics(
         diagnostic_frame,
-        predictive_result['best_model'],
+        regression_result['best_model'],
+        regression_result['feature_columns'],
         prediction_sample,
     )
+    print_final_summary(regression_result, classification_result, args.classification_target)
 
     print_section('OUTPUT FILES')
     print(f'Charts saved to: {output_dir.resolve()}')

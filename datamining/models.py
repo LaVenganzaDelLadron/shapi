@@ -30,3 +30,32 @@ class PigMLData(models.Model):
 
     def __str__(self):
         return f'{self.record_code} {self.avg_weight}'
+
+
+class BatchPigMLSyncLog(models.Model):
+    batch = models.ForeignKey(
+        'batch.PigBatches',
+        on_delete=models.CASCADE,
+        related_name='pig_ml_sync_logs',
+    )
+    batch_code = models.CharField(max_length=120, db_index=True)
+    source_sample_date = models.DateTimeField()
+    old_age = models.IntegerField()
+    new_age = models.IntegerField()
+    old_avg_weight = models.FloatField()
+    new_avg_weight = models.FloatField()
+    old_growth_stage_code = models.CharField(max_length=120, blank=True)
+    new_growth_stage_code = models.CharField(max_length=120)
+    synced_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-synced_at', 'batch_code']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['batch', 'source_sample_date'],
+                name='unique_batch_sync_log_per_sample_date',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.batch_code} @ {self.source_sample_date.isoformat()}'
