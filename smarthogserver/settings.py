@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'feeding',
     'record',
     'datamining',
+    'dashboard',
 ]
 
 MIDDLEWARE = [
