@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddConstraint(
-            model_name='batchpigmldatasynclog',
+            model_name='batchpigmlsynclog',
             constraint=models.UniqueConstraint(
                 fields=('batch', 'source_sample_date'),
                 name='unique_batch_sync_log_per_sample_date',
