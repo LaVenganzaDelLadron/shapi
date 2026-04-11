@@ -12,4 +12,5 @@ urlpatterns = [
     path('feeding/', include('feeding.urls')),
     path('record/', include('record.urls')),
     path('datamining/', include('datamining.urls')),
+    path('dashboard/', include('dashboard.urls')),
 ]
