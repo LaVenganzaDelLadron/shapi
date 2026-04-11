@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'auth.apps.AuthConfig',
+    'dashboard.apps.DashboardConfig',
     'pen',
     'batch',
     'growth',
