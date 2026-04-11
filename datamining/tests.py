@@ -387,3 +387,132 @@ class BatchPigMLSyncTests(TestCase):
         self.assertEqual(self.batch.current_age, 66)
         self.assertAlmostEqual(self.batch.avg_weight, 31.2)
         self.assertEqual(self.batch.growth_stage, self.finisher)
+
+
+class DataminingMLApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.pen = Pen.objects.create(
+            pen_name='ML Pen',
+            capacity=18,
+            status='available',
+            notes='ml pen',
+            date='2026-04-05T00:00:00Z',
+        )
+        self.growth_stage = GrowthStage.objects.create(
+            growth_code='GROWTH010',
+            growth_name='Grower ML',
+            date='2026-04-05T00:00:00Z',
+        )
+        self.batch = PigBatches.objects.create(
+            batch_code='BATCHML001',
+            batch_name='ML Batch',
+            no_of_pigs=15,
+            current_age=50,
+            avg_weight=20.0,
+            notes='ml batch',
+            pen_code=self.pen,
+            growth_stage=self.growth_stage,
+            date='2026-04-05T00:00:00Z',
+        )
+
+        ages = [35, 45, 55, 65, 75, 85, 95, 105, 115, 125, 135, 145]
+        weights = [11.5, 16.2, 23.8, 28.1, 36.4, 41.0, 55.5, 59.1, 74.2, 80.1, 95.3, 101.4]
+        feed_quantities = [1.2, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0, 3.1, 3.4, 3.5, 3.8, 4.0]
+        feeding_counts = [4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2]
+        intervals = [6.0, 6.1, 6.0, 6.2, 8.0, 8.1, 8.2, 8.0, 11.5, 11.8, 12.0, 12.0]
+
+        for index, age in enumerate(ages, start=1):
+            record = Record.objects.create(
+                record_code=f'RECML{index:03d}',
+                batch_code=self.batch,
+                pig_age_days=age,
+                avg_weight=weights[index - 1],
+                growth_stage=self.growth_stage,
+                date=f'2026-04-{index:02d}T08:00:00Z',
+            )
+            PigMLData.objects.create(
+                record=record,
+                record_code=record.record_code,
+                batch_code=self.batch.batch_code,
+                pen_code=self.pen.pen_code,
+                sample_date=f'2026-04-{index:02d}T08:00:00Z',
+                pig_age_days=age,
+                avg_weight=weights[index - 1],
+                total_feed_quantity=feed_quantities[index - 1],
+                feeding_count=feeding_counts[index - 1],
+                avg_feeding_interval_hours=intervals[index - 1],
+                pen_capacity=self.pen.capacity,
+                pen_status=self.pen.status,
+                growth_stage=self.growth_stage.growth_code,
+                feed_type_mode='automatic',
+                device_code='DEVML001',
+                window_days=1,
+            )
+
+    def test_predict_weight_endpoint_returns_knn_prediction(self):
+        response = self.client.post(
+            '/api/datamining/predict-weight/',
+            {
+                'pig_age_days': 100,
+                'total_feed_quantity': 3.0,
+                'feeding_count': 3,
+                'avg_feeding_interval_hours': 8.0,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'success')
+        self.assertIn('predicted_weight', response.data['results'])
+        self.assertEqual(response.data['results']['model_used'], 'KNN')
+        self.assertIn(response.data['results']['k'], [3, 5, 7, 9, 11])
+
+    def test_classify_risk_endpoint_returns_expected_shape(self):
+        response = self.client.post(
+            '/api/datamining/classify-risk/',
+            {
+                'pig_age_days': 100,
+                'avg_weight': 54.0,
+                'feeding_count': 3,
+                'total_feed_quantity': 3.0,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'success')
+        self.assertIsInstance(response.data['results']['low_growth_risk'], bool)
+        self.assertIn(response.data['results']['weight_class'], ['underweight', 'normal', 'overweight'])
+        self.assertIsInstance(response.data['results']['below_expected'], bool)
+
+    def test_suggest_feeding_endpoint_returns_prescriptive_result(self):
+        response = self.client.post(
+            '/api/datamining/suggest-feeding/',
+            {
+                'current_weight': 50.0,
+                'target_weight': 58.0,
+                'pig_age_days': 100,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'success')
+        self.assertIn('recommended_feeding_count', response.data['results'])
+        self.assertIn('recommended_total_feed', response.data['results'])
+        self.assertIn('recommended_interval_hours', response.data['results'])
+        self.assertIn('reason', response.data['results'])
+
+    def test_predict_weight_invalid_input_returns_error(self):
+        response = self.client.post(
+            '/api/datamining/predict-weight/',
+            {
+                'pig_age_days': 100,
+                'feeding_count': 3,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['status'], 'error')

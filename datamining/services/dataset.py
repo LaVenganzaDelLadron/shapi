@@ -8,8 +8,7 @@ from django.db import transaction
 from django.utils.dateparse import parse_datetime
 
 from batch.models import PigBatches
-from datamining.models import PigMLData
-from datamining.models import BatchPigMLSyncLog
+from datamining.models import BatchPigMLSyncLog, PigMLData
 from feeding.models import Feeding
 from growth.models import GrowthStage
 from record.models import Record
