@@ -42,9 +42,9 @@ class RecordController(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
-        if serializer.errors.get('message') == ['Record already exists.']:
+        if serializer.errors.get('message') == ['A daily snapshot already exists for this batch on this UTC day.']:
             return Response(
-                {'message': 'Record already exists.'},
+                {'message': 'A daily snapshot already exists for this batch on this UTC day.'},
                 status=status.HTTP_409_CONFLICT,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -54,7 +54,11 @@ class GetRecordController(APIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_all_records(self):
-        records = Record.objects.all().order_by('record_code')
+        records = Record.objects.select_related('batch_code', 'growth_stage').order_by(
+            'batch_code__batch_code',
+            'date',
+            'record_code',
+        )
         return RecordSerializer(records, many=True).data
 
     def get(self, request):
@@ -94,57 +98,17 @@ class UpdateRecordController(APIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def put(self, request, record_code):
-        record = Record.objects.filter(record_code=record_code).first()
-        if not record:
-            return Response(
-                {
-                    "message": f'Record "{record_code}" not found',
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        payload = dict(request.data)
-        if 'batch_code' not in payload and 'batch_code_id' in payload:
-            payload['batch_code'] = payload.pop('batch_code_id')
-        if 'growth_stage' not in payload and 'growth_stage_id' in payload:
-            payload['growth_stage'] = payload.pop('growth_stage_id')
-
-        serializer = RecordSerializer(record, data=payload)
-        if serializer.is_valid():
-            updated_record = serializer.save()
-            return Response(
-                {
-                    'message': f'Record "{record_code}" updated successfully',
-                    'data': RecordSerializer(updated_record).data,
-                },
-                status=status.HTTP_200_OK,
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                'message': 'Historical records are immutable. Create a new snapshot instead.',
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     def patch(self, request, record_code):
-        record = Record.objects.filter(record_code=record_code).first()
-        if not record:
-            return Response(
-                {
-                    "message": f'Record "{record_code}" not found',
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        payload = dict(request.data)
-        if 'batch_code' not in payload and 'batch_code_id' in payload:
-            payload['batch_code'] = payload.pop('batch_code_id')
-        if 'growth_stage' not in payload and 'growth_stage_id' in payload:
-            payload['growth_stage'] = payload.pop('growth_stage_id')
-
-        serializer = RecordSerializer(record, data=payload, partial=True)
-        if serializer.is_valid():
-            updated_record = serializer.save()
-            return Response(
-                {
-                    'message': f'Record "{record_code}" updated successfully',
-                    'data': RecordSerializer(updated_record).data,
-                },
-                status=status.HTTP_200_OK,
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                'message': 'Historical records are immutable. Create a new snapshot instead.',
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )

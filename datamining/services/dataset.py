@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from datetime import timedelta
 from pathlib import Path
 
+from batch.age import calculate_batch_age
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
 
@@ -190,7 +191,7 @@ def sync_batches_from_pigmldata_csv(csv_path='datamining/generated/synthetic_pig
         old_weight = batch.avg_weight
         old_growth_stage_code = batch.growth_stage.growth_code
 
-        new_age = row['pig_age_days']
+        new_age = calculate_batch_age(batch.date)
         new_weight = row['avg_weight']
         new_growth_stage_code = growth_stage.growth_code
 

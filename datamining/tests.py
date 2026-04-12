@@ -5,9 +5,11 @@ from tempfile import TemporaryDirectory
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from batch.age import calculate_batch_age
 from batch.models import PigBatches
 from datamining.models import BatchPigMLSyncLog, PigMLData
 from datamining.services import build_pig_ml_dataset, sync_batches_from_pigmldata_csv
@@ -308,7 +310,8 @@ class BatchPigMLSyncTests(TestCase):
                 'missing_growth_stages': 0,
             },
         )
-        self.assertEqual(self.batch.current_age, 64)
+        expected_age = calculate_batch_age(self.batch.date, as_of=timezone.now())
+        self.assertEqual(self.batch.current_age, expected_age)
         self.assertAlmostEqual(self.batch.avg_weight, 29.7)
         self.assertEqual(self.batch.growth_stage, self.finisher)
         self.assertEqual(self.batch.no_of_pigs, 12)
@@ -316,7 +319,7 @@ class BatchPigMLSyncTests(TestCase):
         self.assertEqual(self.batch.batch_name, 'Sync Batch')
         self.assertEqual(self.batch.notes, 'leave me unchanged')
         self.assertEqual(sync_log.old_age, 60)
-        self.assertEqual(sync_log.new_age, 64)
+        self.assertEqual(sync_log.new_age, expected_age)
         self.assertAlmostEqual(sync_log.old_avg_weight, 24.5)
         self.assertAlmostEqual(sync_log.new_avg_weight, 29.7)
         self.assertEqual(sync_log.old_growth_stage_code, self.starter.growth_code)
@@ -354,7 +357,8 @@ class BatchPigMLSyncTests(TestCase):
         self.assertEqual(second_counts['updated'], 0)
         self.assertEqual(second_counts['already_synced'], 1)
         self.assertEqual(BatchPigMLSyncLog.objects.filter(batch=self.batch).count(), 1)
-        self.assertEqual(self.batch.current_age, 62)
+        expected_age = calculate_batch_age(self.batch.date, as_of=timezone.now())
+        self.assertEqual(self.batch.current_age, expected_age)
         self.assertAlmostEqual(self.batch.avg_weight, 28.1)
         self.assertEqual(self.batch.growth_stage, self.grower)
 
@@ -384,7 +388,8 @@ class BatchPigMLSyncTests(TestCase):
         call_command('sync_batches_from_pigmldata', csv_path=str(self.csv_path))
 
         self.batch.refresh_from_db()
-        self.assertEqual(self.batch.current_age, 66)
+        expected_age = calculate_batch_age(self.batch.date, as_of=timezone.now())
+        self.assertEqual(self.batch.current_age, expected_age)
         self.assertAlmostEqual(self.batch.avg_weight, 31.2)
         self.assertEqual(self.batch.growth_stage, self.finisher)
 

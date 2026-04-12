@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from batch.age import calculate_batch_age
 from batch.models import PigBatches
 from datamining.models import BatchPigMLSyncLog, PigMLData
 
@@ -37,7 +38,7 @@ def _build_dashboard_summary(batch, latest_row, rows, summary_date):
 
     return {
         'batch_code': batch.batch_code,
-        'current_age': batch.current_age,
+        'current_age': batch.get_current_age(),
         'avg_weight': round(float(batch.avg_weight), 2),
         'total_feed_today': total_feed_today,
         'feeding_count_today': feeding_count_today,
@@ -94,7 +95,7 @@ def update_batches_daily_from_dataset(rolling_window=3, summary_date=None):
             continue
 
         latest_row = rows[-1]
-        target_age = int(latest_row.pig_age_days)
+        target_age = calculate_batch_age(batch.date)
         target_weight = _calculate_smoothed_weight(rows, rolling_window)
         log_key = (batch_code, latest_row.sample_date)
         has_existing_log = log_key in existing_logs

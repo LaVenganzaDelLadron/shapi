@@ -1,5 +1,8 @@
-from django.db import models
 import re
+
+from django.db import models
+
+from batch.age import calculate_batch_age
 
 
 class PigBatches(models.Model):
@@ -59,6 +62,9 @@ class PigBatches(models.Model):
             sync_pen_statuses(affected_pen_codes)
 
         return result
+
+    def get_current_age(self, as_of=None):
+        return calculate_batch_age(self.date, as_of=as_of)
 
     def __str__(self):
         return f'{self.batch_code} {self.batch_name}'

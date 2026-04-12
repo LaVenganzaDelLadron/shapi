@@ -1,6 +1,7 @@
 import re
 
 from django.db import IntegrityError, models, transaction
+from django.db.models.functions import TruncDate
 
 class Record(models.Model):
     record_code = models.CharField(max_length=120, unique=True)
@@ -9,6 +10,16 @@ class Record(models.Model):
     avg_weight = models.FloatField()
     growth_stage = models.ForeignKey('growth.GrowthStage', on_delete=models.CASCADE)
     date = models.DateTimeField()
+
+    class Meta:
+        ordering = ['date', 'record_code']
+        constraints = [
+            models.UniqueConstraint(
+                'batch_code',
+                TruncDate('date'),
+                name='unique_record_batch_per_utc_day',
+            ),
+        ]
 
     @classmethod
     def generate_next_record_code(cls):
@@ -39,4 +50,3 @@ class Record(models.Model):
 
     def __str__(self):
         return f'{self.record_code} {self.batch_code}'
-
