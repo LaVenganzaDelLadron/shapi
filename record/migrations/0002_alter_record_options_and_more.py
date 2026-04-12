@@ -46,8 +46,4 @@ class Migration(migrations.Migration):
             options={'ordering': ['date', 'record_code']},
         ),
         migrations.RunPython(delete_duplicate_daily_records, migrations.RunPython.noop),
-        migrations.AddConstraint(
-            model_name='record',
-            constraint=models.UniqueConstraint(models.F('batch_code'), django.db.models.functions.datetime.TruncDate('date'), name='unique_record_batch_per_utc_day'),
-        ),
     ]
