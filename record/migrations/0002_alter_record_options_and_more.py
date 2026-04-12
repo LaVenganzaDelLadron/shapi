@@ -4,6 +4,34 @@ import django.db.models.functions.datetime
 from django.db import migrations, models
 
 
+def delete_duplicate_daily_records(apps, schema_editor):
+    Record = apps.get_model('record', 'Record')
+    db_alias = schema_editor.connection.alias
+
+    duplicate_groups = (
+        Record.objects.using(db_alias)
+        .annotate(snapshot_day=django.db.models.functions.datetime.TruncDate('date'))
+        .values('batch_code_id', 'snapshot_day')
+        .annotate(record_count=models.Count('id'))
+        .filter(record_count__gt=1)
+    )
+
+    for group in duplicate_groups.iterator():
+        duplicate_ids = list(
+            Record.objects.using(db_alias)
+            .annotate(snapshot_day=django.db.models.functions.datetime.TruncDate('date'))
+            .filter(
+                batch_code_id=group['batch_code_id'],
+                snapshot_day=group['snapshot_day'],
+            )
+            .order_by('-date', '-id')
+            .values_list('id', flat=True)
+        )
+
+        # Keep the latest snapshot for that UTC day and remove the older duplicates.
+        Record.objects.using(db_alias).filter(id__in=duplicate_ids[1:]).delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -17,6 +45,7 @@ class Migration(migrations.Migration):
             name='record',
             options={'ordering': ['date', 'record_code']},
         ),
+        migrations.RunPython(delete_duplicate_daily_records, migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='record',
             constraint=models.UniqueConstraint(models.F('batch_code'), django.db.models.functions.datetime.TruncDate('date'), name='unique_record_batch_per_utc_day'),
