@@ -17,6 +17,18 @@ class SignupSerializer(serializers.ModelSerializer):
         )
         return user
 
+    def validate_username(self, value):
+        username = value.strip()
+        if not username:
+            raise serializers.ValidationError('Username is required.')
+        return username
+
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError('A user with this email already exists.')
+        return email
+
 
 # Backward-compatible alias for existing imports.
 SignuprSerializer = SignupSerializer
@@ -25,3 +37,6 @@ SignuprSerializer = SignupSerializer
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+
+    def validate_email(self, value):
+        return value.strip().lower()

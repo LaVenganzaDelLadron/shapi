@@ -55,15 +55,18 @@ class DataminingMLBaseController(APIView):
     def success_response(self, results, http_status=status.HTTP_200_OK):
         return Response({'status': 'success', 'results': results}, status=http_status)
 
-    def error_response(self, message, http_status=status.HTTP_400_BAD_REQUEST):
-        return Response({'status': 'error', 'message': message}, status=http_status)
+    def error_response(self, message, http_status=status.HTTP_400_BAD_REQUEST, errors=None):
+        payload = {'status': 'error', 'message': message}
+        if errors:
+            payload['errors'] = errors
+        return Response(payload, status=http_status)
 
 
 class PredictWeightController(DataminingMLBaseController):
     def post(self, request):
         serializer = PredictWeightSerializer(data=request.data)
         if not serializer.is_valid():
-            return self.error_response('Invalid input', status.HTTP_400_BAD_REQUEST)
+            return self.error_response('Invalid input', status.HTTP_400_BAD_REQUEST, serializer.errors)
 
         try:
             results = predict_weight(serializer.validated_data)
@@ -79,7 +82,7 @@ class ClassifyRiskController(DataminingMLBaseController):
     def post(self, request):
         serializer = ClassifyRiskSerializer(data=request.data)
         if not serializer.is_valid():
-            return self.error_response('Invalid input', status.HTTP_400_BAD_REQUEST)
+            return self.error_response('Invalid input', status.HTTP_400_BAD_REQUEST, serializer.errors)
 
         try:
             results = classify_risk(serializer.validated_data)
@@ -95,7 +98,7 @@ class SuggestFeedingController(DataminingMLBaseController):
     def post(self, request):
         serializer = SuggestFeedingSerializer(data=request.data)
         if not serializer.is_valid():
-            return self.error_response('Invalid input', status.HTTP_400_BAD_REQUEST)
+            return self.error_response('Invalid input', status.HTTP_400_BAD_REQUEST, serializer.errors)
 
         try:
             results = suggest_feeding_adjustments(**serializer.validated_data)

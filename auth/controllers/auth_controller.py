@@ -2,10 +2,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import authenticate
+from django.contrib.auth import login
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.db.models import Q
-from django.middleware.csrf import get_token
 from auth.serializers import SignupSerializer, LoginSerializer
 
 
@@ -13,52 +13,81 @@ class SignupController(APIView):
     def post(self, request):
         serializer = SignupSerializer(data=request.data)
 
-        if serializer.is_valid():
-            user = serializer.save()
-            return Response({
-                'message': 'Signup Successfully',
-                'user_id': user.id,
-                'username': user.username,
-                'email': user.email,
-            }, status=status.HTTP_201_CREATED)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    'message': 'Signup failed',
+                    'errors': serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+        return Response(
+            {
+                'message': 'Signup successful',
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class LoginController(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
 
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            password = serializer.validated_data['password']
+        if not serializer.is_valid():
+            return Response(
+                {
+                    'message': 'Login failed',
+                    'errors': serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            user_obj = User.objects.filter(Q(email__iexact=email)).first()
-            if not user_obj:
-                return Response(
-                    {'message': 'Invalid email or password'},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
 
-            user = authenticate(request, username=user_obj.username, password=password)
-            if user:
-                return Response({
-                    'message': 'Login Successfully',
-                    'user_id': user.id,
-                    'username': user.username,
-                    'email': user.email,
-                }, status=status.HTTP_200_OK)
-
+        user_obj = User.objects.filter(Q(email__iexact=email)).first()
+        if not user_obj:
             return Response(
                 {'message': 'Invalid email or password'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = authenticate(request, username=user_obj.username, password=password)
+        if not user:
+            return Response(
+                {'message': 'Invalid email or password'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        login(request, user)
+        return Response(
+            {
+                'message': 'Login successful',
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                },
+                'authenticated': True,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LogoutController(APIView):
     def post(self, request):
+        logout(request)
         return Response(
-            {'message': 'Logout Successfully'},
+            {
+                'message': 'Logout successful',
+                'authenticated': False,
+            },
             status=status.HTTP_200_OK,
         )

@@ -45,7 +45,7 @@ WEEKDAY_ALIASES = {
 
 
 class DashboardBaseView(APIView):
-    cache_timeout = 30
+    cache_timeout = 0
 
     def success_response(self, results, http_status=status.HTTP_200_OK):
         return Response({'status': 'success', 'results': results}, status=http_status)
@@ -59,12 +59,18 @@ class DashboardBaseView(APIView):
         return serializer.validated_data
 
     def build_cache_key(self, request, suffix):
-        raw_params = dict(sorted(request.query_params.items()))
-        encoded = json.dumps(raw_params, sort_keys=True)
+        raw_payload = {
+            'path': request.path,
+            'params': dict(sorted(request.query_params.items())),
+        }
+        encoded = json.dumps(raw_payload, sort_keys=True)
         digest = hashlib.md5(encoded.encode('utf-8')).hexdigest()
         return f'dashboard:{suffix}:{digest}'
 
     def cached_payload(self, request, suffix, builder):
+        if self.cache_timeout <= 0:
+            return self.success_response(builder())
+
         cache_key = self.build_cache_key(request, suffix)
         cached = cache.get(cache_key)
         if cached is not None:
