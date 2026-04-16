@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'feeding',
     'record',
     'datamining',
+    'reports.apps.ReportsConfig',
 ]
 
 if HAS_CORSHEADERS:

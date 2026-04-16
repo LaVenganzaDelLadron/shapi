@@ -11,8 +11,10 @@ urlpatterns = [
     path('growth/', include('growth.urls')),
     path('pen/', include('pen.urls')),
     path('record/', include('record.urls')),
+    path('reports/', include('reports.urls')),
     # Keep legacy routes and expose the API-prefixed paths used by the client/tests.
     path('datamining/', include('datamining.urls')),
     path('api/datamining/', include('datamining.urls')),
     path('api/dashboard/', include('dashboard.urls')),
+    path('api/reports/', include('reports.urls')),
 ]

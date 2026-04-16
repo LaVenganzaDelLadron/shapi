@@ -1,3 +1,4 @@
+import hashlib
 from collections import defaultdict
 from datetime import datetime, time, timedelta
 
@@ -271,4 +272,116 @@ def get_dashboard_overview():
         'active_batches': int(batch_totals['active_batches'] or 0),
         'total_feed_today': _rounded(feeding_totals['total_feed_today']),
         'avg_weight_today': _rounded(record_totals['avg_weight_today']),
+    }
+
+
+def _build_report_id(batch_code, start_date, end_date):
+    raw = f'{batch_code}:{start_date.isoformat()}:{end_date.isoformat()}'
+    digest = hashlib.md5(raw.encode('utf-8')).hexdigest()
+    numeric = int(digest[:10], 16) % 10_000_000_000
+    return f'RPT-{numeric:010d}'
+
+
+def get_report_preview(params):
+    today = timezone.localdate()
+    start_date = params.get('start_date') or today
+    end_date = params.get('end_date') or start_date
+    range_start, range_end = date_bounds(start_date=start_date, end_date=end_date)
+
+    batch_code = params.get('batch_code')
+    batch = None
+    if batch_code:
+        batch = PigBatches.objects.filter(batch_code=batch_code).first()
+    else:
+        batch = (
+            PigBatches.objects.filter(feeding__feed_time__gte=range_start, feeding__feed_time__lt=range_end)
+            .distinct()
+            .order_by('batch_code')
+            .first()
+        )
+        if batch is None:
+            batch = PigBatches.objects.order_by('batch_code').first()
+
+    if batch is None:
+        return {
+            'report_id': _build_report_id('UNKNOWN', start_date, end_date),
+            'date': end_date.isoformat(),
+            'batch': {'code': None, 'name': None},
+            'summary': {
+                'total_scheduled_feeds': 0,
+                'enabled_feeds': 0,
+                'disabled_feeds': 0,
+                'total_planned_feed_kg': 0.0,
+                'overdue_feeds': 0,
+                'automation_rate_percent': 0,
+            },
+            'status': {'severity': 'normal', 'needs_review': False},
+            'range': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+            },
+            'messages': ['No batch data is available for the selected range.'],
+            'flags': {'has_overdue': False, 'is_fully_automated': False},
+        }
+
+    feedings = list(
+        Feeding.objects.filter(
+            batch_code=batch,
+            feed_time__gte=range_start,
+            feed_time__lt=range_end,
+        ).order_by('feed_time', 'feed_code')
+    )
+    now = timezone.now()
+
+    total_scheduled_feeds = len(feedings)
+    enabled_feeds = sum(1 for feeding in feedings if feeding.feed_type == 'automatic')
+    disabled_feeds = total_scheduled_feeds - enabled_feeds
+    total_planned_feed_kg = _rounded(sum(feeding.feed_quantity for feeding in feedings))
+    overdue_feeds = sum(1 for feeding in feedings if feeding.feed_time < now)
+    automation_rate_percent = (
+        round((enabled_feeds / total_scheduled_feeds) * 100)
+        if total_scheduled_feeds > 0
+        else 0
+    )
+
+    severity = 'critical' if overdue_feeds > 0 else 'normal'
+    needs_review = overdue_feeds > 0
+
+    messages = []
+    if overdue_feeds > 0:
+        messages.append(f'{overdue_feeds} feeding schedules are overdue')
+        messages.append('Review required before export')
+    elif total_scheduled_feeds == 0:
+        messages.append('No feeding schedules found in the selected range')
+    else:
+        messages.append('All feeding schedules are on track')
+
+    return {
+        'report_id': _build_report_id(batch.batch_code, start_date, end_date),
+        'date': end_date.isoformat(),
+        'batch': {
+            'code': batch.batch_code,
+            'name': batch.batch_name,
+        },
+        'summary': {
+            'total_scheduled_feeds': total_scheduled_feeds,
+            'enabled_feeds': enabled_feeds,
+            'disabled_feeds': disabled_feeds,
+            'total_planned_feed_kg': total_planned_feed_kg,
+            'overdue_feeds': overdue_feeds,
+            'automation_rate_percent': automation_rate_percent,
+        },
+        'status': {
+            'severity': severity,
+            'needs_review': needs_review,
+        },
+        'range': {
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+        },
+        'messages': messages,
+        'flags': {
+            'has_overdue': overdue_feeds > 0,
+            'is_fully_automated': total_scheduled_feeds > 0 and disabled_feeds == 0,
+        },
     }

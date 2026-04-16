@@ -12,6 +12,7 @@ from dashboard.serializers import (
     FeedDispensedTodayQuerySerializer,
     GrowthTrendsQuerySerializer,
     NextFeedingScheduleQuerySerializer,
+    ReportPreviewQuerySerializer,
 )
 from dashboard.services import (
     get_dashboard_overview,
@@ -19,6 +20,7 @@ from dashboard.services import (
     get_feed_dispensed_today,
     get_growth_trends,
     get_next_feeding_schedule,
+    get_report_preview,
 )
 
 
@@ -117,3 +119,11 @@ class DashboardOverviewView(DashboardQueryView):
 
     def build_results(self, params):
         return get_dashboard_overview()
+
+
+class DashboardReportPreviewView(DashboardQueryView):
+    serializer_class = ReportPreviewQuerySerializer
+    cache_suffix = 'report-preview'
+
+    def build_results(self, params):
+        return get_report_preview(params)

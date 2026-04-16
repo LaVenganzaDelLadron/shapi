@@ -171,3 +171,45 @@ class DashboardGrowthTrendsTests(DashboardBaseTestCase):
         self.assertEqual(response.data['status'], 'success')
         self.assertEqual(response.data['results'][0]['batch_code'], self.batch.batch_code)
         self.assertEqual(response.data['results'][0]['total_feed_quantity'], 4.5)
+
+    def test_report_preview_returns_structured_frontend_ready_payload(self):
+        now = timezone.now()
+        self.create_feeding(now - timedelta(hours=3), feed_quantity=2.0, feed_type='automatic')
+        self.create_feeding(now - timedelta(hours=1), feed_quantity=2.5, feed_type='automatic')
+
+        response = self.client.get(
+            reverse('dashboardReportPreview'),
+            {
+                'batch_code': self.batch.batch_code,
+                'start_date': timezone.localdate().isoformat(),
+                'end_date': timezone.localdate().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'success')
+        report = response.data['results']
+        self.assertTrue(report['report_id'].startswith('RPT-'))
+        self.assertEqual(report['batch']['code'], self.batch.batch_code)
+        self.assertEqual(report['summary']['total_scheduled_feeds'], 2)
+        self.assertEqual(report['summary']['enabled_feeds'], 2)
+        self.assertEqual(report['summary']['disabled_feeds'], 0)
+        self.assertEqual(report['summary']['total_planned_feed_kg'], 4.5)
+        self.assertEqual(report['summary']['overdue_feeds'], 2)
+        self.assertEqual(report['summary']['automation_rate_percent'], 100)
+        self.assertEqual(report['status']['severity'], 'critical')
+        self.assertTrue(report['status']['needs_review'])
+        self.assertTrue(report['flags']['has_overdue'])
+        self.assertTrue(report['flags']['is_fully_automated'])
+        self.assertGreaterEqual(len(report['messages']), 1)
+
+    def test_report_preview_returns_empty_summary_when_no_batch_exists(self):
+        PigBatches.objects.all().delete()
+        response = self.client.get(reverse('dashboardReportPreview'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'success')
+        report = response.data['results']
+        self.assertEqual(report['batch']['code'], None)
+        self.assertEqual(report['summary']['total_scheduled_feeds'], 0)
+        self.assertEqual(report['status']['severity'], 'normal')

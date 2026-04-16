@@ -6,6 +6,7 @@ from dashboard.views import (
     DashboardGrowthTrendsView,
     DashboardNextFeedingScheduleView,
     DashboardOverviewView,
+    DashboardReportPreviewView,
 )
 
 
@@ -15,5 +16,5 @@ urlpatterns = [
     path('next-feeding-schedule/', DashboardNextFeedingScheduleView.as_view(), name='dashboardNextFeedingSchedule'),
     path('feed-dispensed-today/', DashboardFeedDispensedTodayView.as_view(), name='dashboardFeedDispensedToday'),
     path('overview/', DashboardOverviewView.as_view(), name='dashboardOverview'),
+    path('report-preview/', DashboardReportPreviewView.as_view(), name='dashboardReportPreview'),
 ]
-
