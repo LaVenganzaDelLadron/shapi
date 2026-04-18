@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.test import TestCase
 from django.urls import reverse
@@ -106,7 +106,26 @@ class DashboardGrowthTrendsTests(DashboardBaseTestCase):
         self.assertEqual(response.data['status'], 'success')
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['batch_code'], self.batch.batch_code)
-        self.assertEqual(len(response.data['results'][0]['series']), 2)
+        self.assertEqual(len(response.data['results'][0]['series']), 3)
+
+    def test_growth_trends_appends_live_batch_snapshot(self):
+        first_snapshot = timezone.now() - timedelta(days=2)
+        self.create_record(first_snapshot, pig_age_days=10, avg_weight=14.5)
+
+        response = self.client.get(reverse('dashboardGrowthTrends'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'success')
+        self.assertEqual(len(response.data['results']), 1)
+
+        series = response.data['results'][0]['series']
+        self.assertEqual(len(series), 2)
+        self.assertEqual(series[0]['avg_weight'], 14.5)
+        self.assertEqual(series[1]['avg_weight'], self.batch.avg_weight)
+
+        live_sample_date = datetime.fromisoformat(series[1]['sample_date'])
+        self.assertEqual(live_sample_date.date(), timezone.localdate())
+        self.assertEqual(series[1]['pig_age_days'], self.batch.get_current_age())
 
     def test_growth_trends_rejects_invalid_date_range(self):
         response = self.client.get(

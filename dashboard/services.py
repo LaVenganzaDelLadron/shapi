@@ -73,6 +73,32 @@ def _group_series_by_batch(rows, item_builder):
     ]
 
 
+def _build_growth_point(sample_time, avg_weight, pig_age_days):
+    return {
+        'sample_date': sample_time.isoformat(),
+        'avg_weight': _rounded(avg_weight),
+        'pig_age_days': int(pig_age_days),
+    }
+
+
+def _build_live_growth_point(batch, current_time=None):
+    current_time = current_time or timezone.now()
+    return _build_growth_point(
+        sample_time=current_time,
+        avg_weight=batch.avg_weight,
+        pig_age_days=batch.get_current_age(as_of=current_time),
+    )
+
+
+def _should_include_live_growth_point(start_date=None, end_date=None):
+    today = timezone.localdate()
+    if start_date and start_date > today:
+        return False
+    if end_date and end_date < today:
+        return False
+    return True
+
+
 def _parse_repeat_days(repeat_days):
     value = str(repeat_days or '').strip().lower()
     if not value or value in {'everyday', 'every day', 'daily', 'all'}:
@@ -111,14 +137,49 @@ def get_growth_trends(params):
         end_date=params.get('end_date'),
     )
 
-    return _group_series_by_batch(
-        queryset.values('batch_code__batch_code', 'date', 'avg_weight', 'pig_age_days'),
-        lambda row: {
+    rows = list(queryset.values('batch_code__batch_code', 'date', 'avg_weight', 'pig_age_days'))
+    latest_record_time = {}
+    grouped_rows = defaultdict(list)
+
+    for row in rows:
+        batch_code_key = row['batch_code__batch_code']
+        grouped_rows[batch_code_key].append({
             'sample_date': row['date'].isoformat(),
             'avg_weight': _rounded(row['avg_weight']),
             'pig_age_days': int(row['pig_age_days']),
-        },
-    )
+        })
+        latest_record_time[batch_code_key] = max(latest_record_time.get(batch_code_key, row['date']), row['date'])
+
+    results = [
+        {
+            'batch_code': batch_code_key,
+            'series': series,
+        }
+        for batch_code_key, series in grouped_rows.items()
+    ]
+
+    if results and _should_include_live_growth_point(
+        start_date=params.get('start_date'),
+        end_date=params.get('end_date'),
+    ):
+        now = timezone.now()
+        batch_filter = PigBatches.objects.filter(batch_code__in=latest_record_time.keys())
+        if batch_code:
+            batch_filter = batch_filter.filter(batch_code=batch_code)
+
+        live_batches = {batch.batch_code: batch for batch in batch_filter}
+        for result in results:
+            batch = live_batches.get(result['batch_code'])
+            if not batch:
+                continue
+
+            latest_record = latest_record_time.get(result['batch_code'])
+            if latest_record and now <= latest_record:
+                continue
+
+            result['series'].append(_build_live_growth_point(batch, now))
+
+    return results
 
 
 def get_feed_consumption(params):
